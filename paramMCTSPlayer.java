@@ -3,6 +3,8 @@ import java.util.Random;
 import java.util.List;
 import java.lang.Math;
 import java.util.Stack;
+import java.util.Arrays;
+import java.lang.Long;
 
 /**
 * paramMCTSPlayer - a simple player interface for PokerSquares.
@@ -14,11 +16,13 @@ import java.util.Stack;
 
 public class ParamMCTSPlayer implements PokerSquaresPlayer{
 
-	private final double EXPLORATION_CONST = 1/(math.sqr(2)); // Kcocsis and Szepesvari p8 of the survey 
-	private final int PRIM_TIME_FACTOR; 
+	private final double EXPLORATION_CONST = 1/(Math.sqrt(2)); // Kcocsis and Szepesvari p8 of the survey 
+	private final int PRIM_TIME_FACTOR = 10; 
 	private final int SIZE = 5; // number of rows/columns in square grid
 	private final int NUM_POS = SIZE * SIZE; // number of positions in square grid
 	private final int NUM_CARDS = Card.NUM_CARDS; // number of cards in deck
+
+	private int simulationBound = 1000;
 
 	private double explorationConst = EXPLORATION_CONST;
 	private int timeFactor = PRIM_TIME_FACTOR;
@@ -27,15 +31,12 @@ public class ParamMCTSPlayer implements PokerSquaresPlayer{
 	private int numPlays = 0; // number of Cards played into the grid so far
 	private Card[][] grid = new Card[SIZE][SIZE]; // grid with Card objects or null (for empty positions)
 	private int[][] legalPlayLists = new int[NUM_POS][NUM_POS]; // stores legal play lists indexed by numPlays (depth)
-    // (This avoids constant allocation/deallocation of such lists during the  selections of MC simulations.)
+    // (This avoids constant allocation/deallocation of such lists)
 
 	private Card[] simDeck = Card.getAllCards(); // a list of all Cards. As we learn the index of cards in the play deck,
 	                                             // we swap each dealt card to its correct index.  Thus, from index numPlays 
 	private List<Card> shuffleDeck = Arrays.asList(simDeck);
-	//private Stack<Card> simDeckStack = new Stack<Card>();
-	private Random randomCard = new Random(); // pseudorandom number generator for cards											 // onward, we maintain a list of undealt cards for MC simulation.
-	private int[][] legalPlayLists = new int[NUM_POS][NUM_POS]; // stores legal play lists indexed by numPlays (depth)
-	// (This avoids constant allocation/deallocation of such lists during the selections of MC simulations.)
+	private Random randomCard = new Random(); // pseudorandom number generator for cards
 	
 	public ParamMCTSPlayer(){
 	}
@@ -66,11 +67,10 @@ public class ParamMCTSPlayer implements PokerSquaresPlayer{
 	@Override
 	public int[] getPlay(Card card, long millisRemaining) {
 		/*
-		 * Player chose the move based on the scores gained from simulation
-		 *   For each move, many simulated MCTS are performed and the (sometimes
-		 *     partially-filled) grid is scored.
-		 *   For each  play simulation, random undrawn cards are drawn in simulation and the paraMCTS player
-		 *     picks a play position that maximizes the score (breaking ties randomly).
+		 *  Player chose the move based on the scores gained from simulation
+		 *  For each move, many simulated MCTS are performed 
+		 *  For each  play simulation, random undrawn cards are drawn in simulation and the paraMCTS player
+		 *   picks a play position that maximizes the score (breaking ties randomly).
 		 *   After many such plays, the average score per simulated play is computed.  The play with the highest 
 		 *     average score is chosen (breaking ties randomly).   
 		 */
@@ -80,7 +80,7 @@ public class ParamMCTSPlayer implements PokerSquaresPlayer{
 		System.arraycopy(plays, numPlays, legalPlayLists[numPlays], 0, remainingPlays);
 
 		// match simDeck to actual play event; in this way, all indices forward from the card contain a list of 
-		//   undealt Cards in some permutation.
+		//  undealt Cards in some permutation.
 		int cardIndex = numPlays;
 		while (!card.equals(simDeck[cardIndex]))
 			cardIndex ++;
@@ -89,7 +89,7 @@ public class ParamMCTSPlayer implements PokerSquaresPlayer{
 
 
 		if (numPlays ==0){ // don't care where we put the first card
-			int ranIndex = random.nextInt(NUM_POS);
+			int ranIndex = randomCard.nextInt(NUM_POS);
 			int play = legalPlayLists[numPlays][ranIndex];
 			// match plays to the actual event by swtiching
 			int index = numPlays;
@@ -102,17 +102,17 @@ public class ParamMCTSPlayer implements PokerSquaresPlayer{
 		else if (numPlays < 24) { // not the forced last play, nor the first play we don't care about
 			// compute average time per move evaluation
 			// evaluate time factors 
-			long millisPerPlay =  timeEvaluation(remainingPlays, millisRemaining, 10);
+			long millisPerPlay =  timeEvaluation(remainingPlays, millisRemaining, timeFactor);
 			long millisPerMoveEval = millisPerPlay / remainingPlays; // dividing time evenly across moves now considered
 
 			long startTime = System.currentTimeMillis();
        			long endTime = startTime + millisPerPlay;
 
-			shuffleDeck = Arrays.asList(simDeck[numPlays+1:NUM_CARDS]);
-			Collections.shuffle(shuffleDeck,random);
-			private Stack<Card> copySimDeck = new Stack<Card>(); 
+			shuffleDeck = Arrays.asList(simDeck); // numPlays+1: NUM_CARDS]
+			Collections.shuffle(shuffleDeck,randomCard);
+			Stack<Card> copySimDeck = new Stack<Card>(); 
 			for (int i =NUM_CARDS-1; i>=numPlays; i--){
-				copySimDeck.push(shuffleDeck[i]);
+				copySimDeck.push(shuffleDeck.get(i));
 			}
 			copySimDeck.push(simDeck[numPlays]);
 
@@ -125,75 +125,33 @@ public class ParamMCTSPlayer implements PokerSquaresPlayer{
 				root.UCTSearch(copySimDeck);
 			}
 			//choose the node with the best score usig UCT
-			root.bestChild(0);
+			UCT_MCTS bestChild= root.bestChild(EXPLORATION_CONST);
+		}
 
 			//clear out
 			// clear nodes and grids, code goes here:
-
-
-				
-
-			/*delete
-			double maxAverageScore = Double.NEGATIVE_INFINITY; // maximum average score found for moves so far
-			ArrayList<Integer> bestPlays = new ArrayList<Integer>(); // all plays yielding the maximum average score 
-
-			for (int i = 0; i < remainingPlays; i++) { // for each legal play position
-				int play = legalPlayLists[numPlays][i];
-				long startTime = System.currentTimeMillis();
-				long endTime = startTime + millisPerMoveEval; // compute when MC simulations should end
-				makePlay(card, play / SIZE, play % SIZE);  // play the card at the empty position
-				int simCount = 0;
-				int scoreTotal = 0;
-				while (System.currentTimeMillis() < endTime) { // perform as many MCTS simulations as possible through the allotted time
-					// Perform a Monte Carlo simulation of greedy play to the depth limit or game end, whichever comes first.
-					scoreTotal += MCTSPlay();  // accumulate MCTS simulation scores
-					simCount++; // increment count of MCTS simulations
-				}
-				undoPlay(); // undo the play under evaluation
-				// update (if necessary) the maximum average score and the list of best plays
-				double averageScore = (double) scoreTotal / simCount;
-				if (averageScore >= maxAverageScore) {
-					if (averageScore > maxAverageScore)
-						bestPlays.clear();
-					bestPlays.add(play);
-					maxAverageScore = averageScore;
-				}
-			}
-			int bestPlay = bestPlays.get(random.nextInt(bestPlays.size())); // choose a best play (breaking ties randomly)
-			// update our list of plays, recording the chosen play in its sequential position; all onward from numPlays are empty positions
-			int bestPlayIndex = numPlays;
-			while (plays[bestPlayIndex] != bestPlay)
-				bestPlayIndex++;
-			plays[bestPlayIndex] = plays[numPlays];
-			plays[numPlays] = bestPlay;
-		}
-		*/
+		
 		int[] playPos = {plays[numPlays] / SIZE, plays[numPlays] % SIZE}; // decode it into row and column
 		makePlay(card, playPos[0], playPos[1]); // make the chosen play (not undoing this time)
 		return playPos; // return the chosen play
-	}
+	}	
 
-	private long timeEvaluation(int remainingPlays, long millisRemaining, int factor){
+	
+	public long timeEvaluation(int remainingPlays, long millisRemaining, int timeFactor){
 	// compute average time per move evaluation
 	// *** can add factors  to give more time to some moves, ued for simulation. 
 	// factor range: 5-100 ( 5 is 20%), suggested: 10
+		
 		long millisPerPlay = millisRemaining / remainingPlays ; 
-		if (factor >= 5){
-			millisPerPlay = millisPerPlay *( 1+ ((Math.floor(NUM_POS/4)- Math.abs(remainingPlays-Math.floor(NUM_POS/2)))/Math.floor(NUM_POS/4))/factor);
+		/*
+		if (timeFactor >= 5){
+			millisPerPlay = millisPerPlay *Long.valueOf(( 1+ ((Math.floor(NUM_POS/4)- Math.abs(remainingPlays-Math.floor(NUM_POS/2)))/Math.floor(NUM_POS/4))/timeFactor));
 	        	}
-	        	return millisPerPlay 
+	        	*/
+	        	return millisPerPlay; 
 	}
+	
 
-	/**
-	 * From the chosen play, perform simulated Card draws with MCTS
-	 * and return the resulting grid score.
-	 * other prarameters to add: factors for time allocation 
-	 * @return resulting grid score after MCTS simulation to given depthLimit
-	 */
-	private int MCTSPlay2() {
-	// ignores this now, code moved to UCT_MCTS class
-		return;
-	}
 
 	public void makePlay(Card card, int row, int col) {
 		// match simDeck to event
@@ -270,20 +228,20 @@ public class ParamMCTSPlayer implements PokerSquaresPlayer{
 			this.actionsLayer = parent.actionsLayer + 1;
 		}
 
-		private UCTSearch(Stack<Card> copySimDeck){
+		private void UCTSearch(Stack<Card> copySimDeck){
 			this.cardDeck = (Stack<Card>) copySimDeck.clone();
-			double finalSumScore;
+			double finalSumScore = 0;
 			
 			// tree policy
 			UCT_MCTS toSelect = this.treePolicy();
 
 			//default policy: running the simulation from toSelect
-			for (i =0; i < simulationBound; i++){		
+			for (int i =0; i < simulationBound; i++){		
 				finalSumScore += toSelect.defaultPolicy(this.cardDeck);
 			}
 			
 			//Backup
-			toSelect.backUp(curScore);
+			toSelect.backUp(finalSumScore);
 
 		}
 
@@ -296,21 +254,21 @@ public class ParamMCTSPlayer implements PokerSquaresPlayer{
 				int remainingPlays = NUM_POS - toSelect.actionsLayer;
 				if (remainingPlays == 0){ //reach to the terminal
 					toSelect.children = null;	//set as terminal
-					return;
+					return toSelect;
 				}
 				else if (toSelect.expanded == false){ 
 					Card curCard =this.cardDeck.pop();
 					UCT_MCTS[] children = new UCT_MCTS[remainingPlays];
-					for (int i; i<remainingPlays; i++){ //expansion if not expanded at all
+					for (int i=0; i<remainingPlays; i++){ //expansion if not expanded at all
 						toSelect.children[i] = toSelect.expand(curCard);
 					}
 					toSelect.expanded = true; //set expanded as true	
-					int randExplore = math.random() * ((remainingPlays) + 1);
+					int randExplore = randomCard.nextInt(remainingPlays+ 1);
 					toSelect = toSelect.children[randExplore];
 					return toSelect;
 				}
 				else{
-					toSelect = toSelect.bestChild(EXPLORATION_CONST)
+					toSelect = toSelect.bestChild(EXPLORATION_CONST);
 					this.cardDeck.pop(); // in order to match the deck to the node about to expand	
 				}													
 			}
@@ -327,7 +285,7 @@ public class ParamMCTSPlayer implements PokerSquaresPlayer{
 
 			Card[][] newGrids = copyGrids(this.grids, SIZE); // construct a new grid for the new node
 			// choose random untried actions and assign to the new child
-			for (i =this.childPosition; i< SIZE * SIZE; i++){
+			for (int i =this.childPosition; i< SIZE * SIZE; i++){
 				if (this.grids[i/SIZE][i%SIZE] == null){
 					newGrids[i/SIZE][i%SIZE] = curCard;
 					this.childPosition = i + 1;
@@ -342,29 +300,30 @@ public class ParamMCTSPlayer implements PokerSquaresPlayer{
 		private Card[][] copyGrids(Card[][] gridsToCopy, int size){
 			Card[][] newGrid = new Card[size][size];
 			// copy the board from parent
-			for (i =0; i<NUM_POS; i++){
+			for (int i =0; i<NUM_POS; i++){
 				newGrid[i/size][i%size] = gridsToCopy[i/size][i/size];
 			}
-			return newGrid
+			return newGrid;
 		}
 
 		private double defaultPolicy(Stack<Card> deckForSim){
 			Stack<Card> deckLeft = (Stack<Card>) deckForSim.clone();
-			Card[][] simGrids = copyGrids(this.grids, SIZE)
+			Card[][] simGrids = copyGrids(this.grids, SIZE);
+
 			
 			// Fill emptiness on the board randomly
-			Collections.shuffle(deckLeft, random);
-			for (i=0; i<NUM_POS; i++){
+			Collections.shuffle(deckLeft, randomCard);
+			for (int i=0; i<NUM_POS; i++){
 				if (simGrids[i/SIZE][i%SIZE] == null){
 					simGrids[i/SIZE][i%SIZE] = deckLeft.pop();			
 				}
 			}
-			double curScore = system.getScore(simGrids)
+			double curScore = system.getScore(simGrids);
 			return curScore;
 		}
 		
 
-		private backUp(double score){
+		private void backUp(double score){
 			UCT_MCTS curNode = this;
 			while (curNode != null){
 				curNode.timesVisited ++;
@@ -373,27 +332,28 @@ public class ParamMCTSPlayer implements PokerSquaresPlayer{
 			}
 		}
 
-		private UCT_MCTS bestChild(int c){
+		private UCT_MCTS bestChild(double c){
 			// return the best child of the node/ root node
-			UCT_MCTS bestChild;
+			UCT_MCTS bestChild = null;
 			double bestScoreSoFar = Double.NEGATIVE_INFINITY;
 
 			double bestScore = Double.MIN_VALUE;
 			// select the best score by looping through all children
 			for (UCT_MCTS child: this.children){
 				// p9 of survey, equation in bestChild
-				double curScore = child.sumOfScore/child.timesVisited + c*Math.sqrt(2* Math.log(this.timesVisited)/child.timesVisited)
+				double curScore = child.sumOfScore/child.timesVisited + c*Math.sqrt(2* Math.log(this.timesVisited)/child.timesVisited);
 				if (curScore > bestScoreSoFar){
 					bestChild = child;
-					bestScoreSoFar = curScore
+					bestScoreSoFar = curScore;
 				}
 			}
-			return bestChild
-	}
+			return bestChild;
+		}
+	}	
 public static void main(String[] args) {
 		PokerSquaresPointSystem system = PokerSquaresPointSystem.getAmeritishPointSystem();
 		//PokerSquaresPointSystem system = PokerSquaresPointSystem.getRandomPointSystem();
 		System.out.println(system);
 		new PokerSquares(new ParamMCTSPlayer(), system).play(); // play a single game
 	}	
-}s
+}
